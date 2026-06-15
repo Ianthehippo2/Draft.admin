@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Schooled Draft Admin</title>
+<style>
+body{background:#111;color:white;font-family:Arial;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+button,select{padding:15px 25px;font-size:18px;border:none;border-radius:10px;font-weight:bold}
+button{cursor:pointer}
+.next{background:gold}
+.prev{background:white}
+.reset{background:red;color:white}
+</style>
+</head>
+<body>
+
+<h1>Schooled Draft Admin</h1>
+
+<select id="classSelect">
+  <option value="English">English</option>
+  <option value="Math">Math</option>
+  <option value="Science">Science</option>
+  <option value="History">History</option>
+  <option value="Spanish">Spanish</option>
+</select>
+
+<h2 id="status">Loading...</h2>
+
+<button class="next" onclick="nextReveal()">Next Reveal</button>
+<button class="prev" onclick="previousReveal()">Previous</button>
+<button class="reset" onclick="resetClass()">Reset Class</button>
+
+<script>
+const DB = "https://draft-ac851-default-rtdb.firebaseio.com/draft.json";
+
+let state = {
+  className:"English",
+  revealedCount:0,
+  action:"board",
+  commandId:0
+};
+
+async function loadState(){
+  const res = await fetch(DB);
+  const data = await res.json();
+
+  if(data){
+    state = data;
+  }else{
+    await saveState();
+  }
+
+  document.getElementById("classSelect").value = state.className;
+  updateStatus();
+}
+
+async function saveState(){
+  await fetch(DB,{
+    method:"PUT",
+    body:JSON.stringify(state)
+  });
+  updateStatus();
+}
+
+function updateStatus(){
+  document.getElementById("status").textContent =
+    `${state.className} - ${state.revealedCount} Revealed`;
+}
+
+async function nextReveal(){
+  state.action = "next";
+  state.commandId = Date.now();
+  await saveState();
+}
+
+async function previousReveal(){
+  if(state.revealedCount > 0){
+    state.revealedCount--;
+  }
+  state.action = "board";
+  state.commandId = Date.now();
+  await saveState();
+}
+
+async function resetClass(){
+  state.revealedCount = 0;
+  state.action = "board";
+  state.commandId = Date.now();
+  await saveState();
+}
+
+document.getElementById("classSelect").addEventListener("change", async function(){
+  state.className = this.value;
+  state.revealedCount = 0;
+  state.action = "board";
+  state.commandId = Date.now();
+  await saveState();
+});
+
+loadState();
+</script>
+
+</body>
+</html>
