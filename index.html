@@ -187,69 +187,126 @@ loadState();
   async function syncStarsFromSheet(){
   const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1bhtZBaC-JDy1TzrKo8DGd6rP_OffNAlXPRWYJTq2Rks/export?format=csv";
 
-  const res = await fetch(SHEET_CSV_URL);
-  const csv = await res.text();
+  try{
+    const res = await fetch(SHEET_CSV_URL);
 
-  const rows = csv
-    .split("\n")
-    .map(row => row.split(",").map(cell => cell.trim().replaceAll('"', "")));
-
-  const headers = rows[0];
-  const nameIndex = headers.indexOf("Name");
-  const starsIndex = headers.indexOf("Stars");
-
-  if(nameIndex === -1 || starsIndex === -1){
-    alert("Sheet needs columns named Name and Stars.");
-    return;
-  }
-
-  const rankings = {};
-
-  rows.slice(1).forEach(row => {
-    const name = row[nameIndex];
-    const stars = Number(row[starsIndex]);
-
-    if(name && stars >= 0 && stars <= 5){
-      rankings[name.toLowerCase()] = stars;
+    if(!res.ok){
+      alert("Could not read Google Sheet. Make sure sharing is set to Anyone with the link can view.");
+      return;
     }
-  });
 
-  const studentsRes = await fetch(`${BASE_DB}/classes/${state.className}/students.json`);
-  let students = await studentsRes.json();
+    const csv = await res.text();
 
-  if(!students){
-    alert("No students found in Firebase for this class.");
-    return;
+    function parseCSV(text){
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let insideQuotes = false;
+
+      for(let i = 0; i < text.length; i++){
+        const char = text[i];
+        const next = text[i + 1];
+
+        if(char === '"' && insideQuotes && next === '"'){
+          cell += '"';
+          i++;
+        }else if(char === '"'){
+          insideQuotes = !insideQuotes;
+        }else if(char === "," && !insideQuotes){
+          row.push(cell.trim());
+          cell = "";
+        }else if((char === "\n" || char === "\r") && !insideQuotes){
+          if(cell || row.length){
+            row.push(cell.trim());
+            rows.push(row);
+            row = [];
+            cell = "";
+          }
+        }else{
+          cell += char;
+        }
+      }
+
+      if(cell || row.length){
+        row.push(cell.trim());
+        rows.push(row);
+      }
+
+      return rows;
+    }
+
+    function cleanName(name){
+      return String(name || "")
+        .toLowerCase()
+        .replace(/[^a-z\s-]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    const rows = parseCSV(csv);
+
+    const headers = rows[0].map(h => h.trim());
+    const nameIndex = headers.findIndex(h => h.toLowerCase() === "name");
+    const starsIndex = headers.findIndex(h => h.toLowerCase() === "stars");
+
+    if(nameIndex === -1 || starsIndex === -1){
+      alert("Your Google Sheet must have columns called Name and Stars.");
+      return;
+    }
+
+    const rankings = {};
+
+    rows.slice(1).forEach(row => {
+      const name = cleanName(row[nameIndex]);
+      const stars = Number(row[starsIndex]);
+
+      if(name && stars >= 1 && stars <= 5){
+        rankings[name] = stars;
+      }
+    });
+
+    const studentsRes = await fetch(`${BASE_DB}/classes/${state.className}/students.json?cacheBust=${Date.now()}`);
+    let students = await studentsRes.json();
+
+    if(!students){
+      alert("No students found in Firebase for this class.");
+      return;
+    }
+
+    students = Array.isArray(students) ? students : Object.values(students);
+
+    let matched = 0;
+    let unmatched = 0;
+
+    students = students.map(student => {
+      const key = cleanName(student.name);
+
+      if(rankings[key] !== undefined){
+        student.stars = rankings[key];
+        matched++;
+      }else{
+        student.stars = 1;
+        unmatched++;
+      }
+
+      return student;
+    });
+
+    await fetch(`${BASE_DB}/classes/${state.className}/students.json`, {
+      method: "PUT",
+      body: JSON.stringify(students)
+    });
+
+    state.revealedCount = 0;
+    state.action = "board";
+    state.commandId = Date.now();
+    await saveState();
+
+    alert(`Stars synced.\nMatched: ${matched}\nNot found, set to 1 star: ${unmatched}`);
+  }catch(error){
+    console.error(error);
+    alert("Star sync failed. Check that the Google Sheet is public and has Name and Stars columns.");
   }
-
-  students = Array.isArray(students) ? students : Object.values(students);
-
-  let matched = 0;
-
-  students = students.map(student => {
-  const key = student.name.toLowerCase();
-
-  if(rankings[key] !== undefined){
-    student.stars = Math.max(1, Number(rankings[key]));
-    matched++;
-  } else {
-    student.stars = 1;
-  }
-
-  return student;
-});
-
-  await fetch(`${BASE_DB}/classes/${state.className}/students.json`, {
-    method: "PUT",
-    body: JSON.stringify(students)
-  });
-
-  state.revealedCount = 0;
-  state.action = "board";
-  state.commandId = Date.now();
-  await saveState();
-
-  alert(`Updated ${matched} students from the Google Sheet.`);
 }
 </script>
 
