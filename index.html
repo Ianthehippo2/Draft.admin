@@ -63,18 +63,21 @@ let state = {
   commandId: 0
 };
 
-async function loadState(){
-  const res = await fetch(DRAFT_DB);
+async function getLatestState(){
+  const res = await fetch(`${DRAFT_DB}?cacheBust=${Date.now()}`);
   const data = await res.json();
 
   if(data){
     state = data;
-  }else{
-    await saveState();
   }
 
-  document.getElementById("classSelect").value = state.className;
   updateStatus();
+  return state;
+}
+
+async function loadState(){
+  await getLatestState();
+  document.getElementById("classSelect").value = state.className;
 }
 
 async function saveState(){
@@ -92,29 +95,40 @@ function updateStatus(){
 }
 
 async function nextReveal(){
+  await getLatestState();
+
   state.action = "next";
   state.commandId = Date.now();
+
   await saveState();
 }
 
 async function previousReveal(){
+  await getLatestState();
+
   if(state.revealedCount > 0){
     state.revealedCount--;
   }
 
   state.action = "board";
   state.commandId = Date.now();
+
   await saveState();
 }
 
 async function resetClass(){
+  await getLatestState();
+
   state.revealedCount = 0;
   state.action = "board";
   state.commandId = Date.now();
+
   await saveState();
 }
 
 document.getElementById("classSelect").addEventListener("change", async function(){
+  await getLatestState();
+
   state.className = this.value;
   state.revealedCount = 0;
   state.action = "board";
@@ -155,6 +169,7 @@ async function importStudents(){
     state.revealedCount = 0;
     state.action = "board";
     state.commandId = Date.now();
+
     await saveState();
 
     alert(`Imported ${students.length} students into ${state.className}.`);
@@ -164,6 +179,7 @@ async function importStudents(){
   }
 }
 
+setInterval(getLatestState, 1000);
 loadState();
 </script>
 
