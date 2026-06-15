@@ -15,7 +15,7 @@ body{
   gap:18px;
 }
 
-button,select{
+button,select,input{
   padding:15px 25px;
   font-size:18px;
   border:none;
@@ -27,6 +27,7 @@ button{cursor:pointer}
 .next{background:gold}
 .prev{background:white}
 .reset{background:red;color:white}
+.import{background:#4caf50;color:white}
 </style>
 </head>
 
@@ -48,8 +49,12 @@ button{cursor:pointer}
 <button class="prev" onclick="previousReveal()">Previous</button>
 <button class="reset" onclick="resetClass()">Reset Class</button>
 
+<input type="file" id="jsonUpload" accept=".json">
+<button class="import" onclick="importStudents()">Import Students JSON</button>
+
 <script>
-const DB = "https://draft-ac851-default-rtdb.firebaseio.com/draft.json";
+const BASE_DB = "https://draft-ac851-default-rtdb.firebaseio.com";
+const DRAFT_DB = `${BASE_DB}/draft.json`;
 
 let state = {
   className: "English",
@@ -59,7 +64,7 @@ let state = {
 };
 
 async function loadState(){
-  const res = await fetch(DB);
+  const res = await fetch(DRAFT_DB);
   const data = await res.json();
 
   if(data){
@@ -73,7 +78,7 @@ async function loadState(){
 }
 
 async function saveState(){
-  await fetch(DB,{
+  await fetch(DRAFT_DB,{
     method:"PUT",
     body:JSON.stringify(state)
   });
@@ -117,6 +122,47 @@ document.getElementById("classSelect").addEventListener("change", async function
 
   await saveState();
 });
+
+async function importStudents(){
+  const fileInput = document.getElementById("jsonUpload");
+  const file = fileInput.files[0];
+
+  if(!file){
+    alert("Choose a JSON file first.");
+    return;
+  }
+
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    let students = [];
+
+    if(data.classes && data.classes[state.className] && data.classes[state.className].students){
+      students = data.classes[state.className].students;
+    }else if(Array.isArray(data)){
+      students = data;
+    }else{
+      alert("Could not find students in this JSON.");
+      return;
+    }
+
+    await fetch(`${BASE_DB}/classes/${state.className}/students.json`, {
+      method: "PUT",
+      body: JSON.stringify(students)
+    });
+
+    state.revealedCount = 0;
+    state.action = "board";
+    state.commandId = Date.now();
+    await saveState();
+
+    alert(`Imported ${students.length} students into ${state.className}.`);
+  }catch(error){
+    alert("Import failed. Make sure the file is valid JSON.");
+    console.error(error);
+  }
+}
 
 loadState();
 </script>
