@@ -33,11 +33,32 @@ button{cursor:pointer}
 const DB = "https://draft-ac851-default-rtdb.firebaseio.com/draft.json";
 
 let state = {
-  className:"English",
-  revealedCount:0,
-  action:"board",
-  commandId:0
-};
+{
+  "classes": {
+    "English": {
+      "students": []
+    },
+    "Math": {
+      "students": []
+    },
+    "Science": {
+      "students": []
+    },
+    "History": {
+      "students": []
+    },
+    "Spanish": {
+      "students": []
+    }
+  },
+
+  "live": {
+    "currentClass": "English",
+    "revealedCount": 0,
+    "currentStudent": null,
+    "state": "board"
+  }
+}
 
 async function loadState(){
   const res = await fetch(DB);
