@@ -52,6 +52,8 @@ button{cursor:pointer}
 <input type="file" id="jsonUpload" accept=".json">
 <button class="import" onclick="importStudents()">Import Students JSON</button>
 
+  <button class="import" onclick="syncStarsFromSheet()">Sync Stars From Google Sheet</button>
+
 <script>
 const BASE_DB = "https://draft-ac851-default-rtdb.firebaseio.com";
 const DRAFT_DB = `${BASE_DB}/draft.json`;
@@ -181,6 +183,74 @@ async function importStudents(){
 
 setInterval(getLatestState, 1000);
 loadState();
+ 
+  async function syncStarsFromSheet(){
+  const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1bhtZBaC-JDy1TzrKo8DGd6rP_OffNAlXPRWYJTq2Rks/export?format=csv";
+
+  const res = await fetch(SHEET_CSV_URL);
+  const csv = await res.text();
+
+  const rows = csv
+    .split("\n")
+    .map(row => row.split(",").map(cell => cell.trim().replaceAll('"', "")));
+
+  const headers = rows[0];
+  const nameIndex = headers.indexOf("Name");
+  const starsIndex = headers.indexOf("Stars");
+
+  if(nameIndex === -1 || starsIndex === -1){
+    alert("Sheet needs columns named Name and Stars.");
+    return;
+  }
+
+  const rankings = {};
+
+  rows.slice(1).forEach(row => {
+    const name = row[nameIndex];
+    const stars = Number(row[starsIndex]);
+
+    if(name && stars >= 0 && stars <= 5){
+      rankings[name.toLowerCase()] = stars;
+    }
+  });
+
+  const studentsRes = await fetch(`${BASE_DB}/classes/${state.className}/students.json`);
+  let students = await studentsRes.json();
+
+  if(!students){
+    alert("No students found in Firebase for this class.");
+    return;
+  }
+
+  students = Array.isArray(students) ? students : Object.values(students);
+
+  let matched = 0;
+
+  students = students.map(student => {
+  const key = student.name.toLowerCase();
+
+  if(rankings[key] !== undefined){
+    student.stars = Math.max(1, Number(rankings[key]));
+    matched++;
+  } else {
+    student.stars = 1;
+  }
+
+  return student;
+});
+
+  await fetch(`${BASE_DB}/classes/${state.className}/students.json`, {
+    method: "PUT",
+    body: JSON.stringify(students)
+  });
+
+  state.revealedCount = 0;
+  state.action = "board";
+  state.commandId = Date.now();
+  await saveState();
+
+  alert(`Updated ${matched} students from the Google Sheet.`);
+}
 </script>
 
 </body>
